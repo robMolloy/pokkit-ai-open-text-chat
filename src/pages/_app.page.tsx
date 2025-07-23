@@ -25,6 +25,7 @@ import { useThemeStore } from "@/stores/themeStore";
 import "@/styles/globals.css";
 import "@/styles/markdown.css";
 import type { AppProps } from "next/app";
+import Head from "next/head";
 import { useEffect } from "react";
 
 const useAuth = (p: {
@@ -116,6 +117,9 @@ export default function App({ Component, pageProps }: AppProps) {
 
   return (
     <>
+      <Head>
+        <title>Pokkit AI - open text chat</title>
+      </Head>
       <Layout
         showLeftSidebar={
           currentUserStore.data.status === "loggedIn" &&
