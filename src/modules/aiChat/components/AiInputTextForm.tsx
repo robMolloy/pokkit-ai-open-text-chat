@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 
 export const AiInputTextForm = (p: {
   disabled: boolean;
-  onSubmit: (p: { text: string }) => Promise<void>;
+  onSubmit: (p: { text: string }) => Promise<unknown>;
 }) => {
   const [text, setText] = useState<string>("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);

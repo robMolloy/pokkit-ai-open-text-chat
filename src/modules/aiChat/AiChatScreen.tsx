@@ -12,17 +12,75 @@ import { ErrorScreen } from "@/screens/ErrorScreen";
 import { LoadingScreen } from "@/screens/LoadingScreen";
 import React, { useState } from "react";
 import { useAiTextMessageRecordsStore } from "../aiTextMessages/aiTextMessageRecordsStore";
-import { createAiTextMessageRecord } from "../aiTextMessages/dbAiTextMessageUtils";
+import {
+  createAiTextMessageRecord,
+  TAiTextMessageRecord,
+} from "../aiTextMessages/dbAiTextMessageUtils";
 import {
   createAiThreadRecord,
+  TAiThreadRecord,
   updateAiThreadRecordTitle,
 } from "../aiThreads/dbAiThreadRecordUtils";
 import {
   callAnthropic,
   createAnthropicTextMessage,
   createTitleForMessageThreadWithAnthropic,
+  TStreamStatus,
 } from "../providers/anthropicApi";
 import { AiInputTextForm } from "./components/AiInputTextForm";
+import Anthropic from "@anthropic-ai/sdk";
+
+const submitMessage = async (p: {
+  anthropicInstance: Anthropic;
+  text: string;
+  thread: TAiThreadRecord;
+  historicalAiTextMessageRecords: TAiTextMessageRecord[];
+  onStreamStatusChange: (status: TStreamStatus) => void;
+  onStreamChange: (text: string) => void;
+}) => {
+  const createAiTextMessageRecordResp = await createAiTextMessageRecord({
+    pb,
+    data: { threadId: p.thread.id, role: "user", contentText: p.text },
+  });
+
+  if (!createAiTextMessageRecordResp.success)
+    return { success: false, error: "create ai text message failed" } as const;
+
+  const anthropicMessages = [
+    ...p.historicalAiTextMessageRecords.map((x) =>
+      createAnthropicTextMessage({ role: x.role, text: x.contentText }),
+    ),
+    createAnthropicTextMessage({ role: "user", text: p.text }),
+  ];
+
+  if (anthropicMessages.length > 2 && !p.thread.title) {
+    createTitleForMessageThreadWithAnthropic({
+      anthropic: p.anthropicInstance,
+      messages: anthropicMessages,
+    }).then((resp) => {
+      if (resp.success) updateAiThreadRecordTitle({ pb, id: p.thread.id, title: resp.data });
+    });
+  }
+
+  const anthropicResp = await callAnthropic({
+    anthropic: p.anthropicInstance,
+    messages: anthropicMessages,
+    onStreamStatusChange: p.onStreamStatusChange,
+    onStreamChange: p.onStreamChange,
+  });
+
+  if (!anthropicResp.success) return { success: false, error: "anthropic call failed" };
+
+  const createAssistantAiTextMessageRecordResp = await createAiTextMessageRecord({
+    pb,
+    data: { threadId: p.thread.id, role: "assistant", contentText: anthropicResp.data },
+  });
+
+  if (!createAssistantAiTextMessageRecordResp.success)
+    return { success: false, error: "create assistant ai text message failed" };
+
+  return { success: true };
+};
 
 export const AiChatScreen = (p: { threadFriendlyId: string }) => {
   const threadFriendlyId = p.threadFriendlyId;
@@ -35,7 +93,7 @@ export const AiChatScreen = (p: { threadFriendlyId: string }) => {
     ? aiTextMessagesRecordsStore.getMessagesByThreadId(currentThread.id)
     : undefined;
 
-  const aiTextWithMediaRecords = (aiTextMessageRecords ?? []).sort((a, b) =>
+  const aiTextRecords = (aiTextMessageRecords ?? []).sort((a, b) =>
     a.created < b.created ? -1 : 1,
   );
 
@@ -52,10 +110,10 @@ export const AiChatScreen = (p: { threadFriendlyId: string }) => {
       <div className="flex h-full flex-col">
         <ScrollContainer scrollToBottomDeps={[threadFriendlyId]}>
           <div className="p-4 pb-0">
-            {aiTextWithMediaRecords.length === 0 && (
+            {aiTextRecords.length === 0 && (
               <AssistantTextMessage>Hello! How can I help you today?</AssistantTextMessage>
             )}
-            {aiTextWithMediaRecords.map((x) => {
+            {aiTextRecords.map((x) => {
               if (x.role === "assistant")
                 return <AssistantTextMessage key={x.id}>{x.contentText}</AssistantTextMessage>;
 
@@ -74,67 +132,30 @@ export const AiChatScreen = (p: { threadFriendlyId: string }) => {
               disabled={mode === "thinking" || mode === "streaming"}
               onSubmit={async (x) => {
                 setMode("thinking");
-                const resp = await (async (): Promise<
-                  { success: false; error: string } | { success: true }
-                > => {
-                  const thread = await (async () => {
-                    if (currentThread) return currentThread;
+                const thread = await (async () => {
+                  if (currentThread) return currentThread;
 
-                    const resp = await createAiThreadRecord({
-                      pb,
-                      data: { friendlyId: threadFriendlyId, title: "" },
-                    });
-                    if (resp.success) return resp.data;
-                  })();
-
-                  if (!thread) return { success: false, error: "thread not found" };
-                  const threadId = thread.id;
-
-                  const createAiTextMessageRecordResp = await createAiTextMessageRecord({
+                  const resp = await createAiThreadRecord({
                     pb,
-                    data: { threadId, role: "user", contentText: x.text },
+                    data: { friendlyId: threadFriendlyId, title: "" },
                   });
-
-                  if (!createAiTextMessageRecordResp.success)
-                    return { success: false, error: "create ai text message failed" };
-
-                  const anthropicMessages = [
-                    ...aiTextWithMediaRecords.map((x) =>
-                      createAnthropicTextMessage({ role: x.role, text: x.contentText }),
-                    ),
-                    createAnthropicTextMessage({ role: "user", text: x.text }),
-                  ];
-
-                  if (anthropicMessages.length > 2 && !thread.title) {
-                    createTitleForMessageThreadWithAnthropic({
-                      anthropic: anthropicInstance,
-                      messages: anthropicMessages,
-                    }).then((resp) => {
-                      if (resp.success)
-                        updateAiThreadRecordTitle({ pb, id: thread.id, title: resp.data });
-                    });
-                  }
-
-                  const anthropicResp = await callAnthropic({
-                    anthropic: anthropicInstance,
-                    messages: anthropicMessages,
-                    onStreamStatusChange: (x) => setMode(x === "finished" ? "ready" : x),
-                    onStreamChange: (text) => setStreamedText(text),
-                  });
-
-                  if (!anthropicResp.success)
-                    return { success: false, error: "anthropic call failed" };
-
-                  const createAssistantAiTextMessageRecordResp = await createAiTextMessageRecord({
-                    pb,
-                    data: { threadId, role: "assistant", contentText: anthropicResp.data },
-                  });
-
-                  if (!createAssistantAiTextMessageRecordResp.success)
-                    return { success: false, error: "create assistant ai text message failed" };
-
-                  return { success: true };
+                  if (resp.success) return resp.data;
                 })();
+
+                if (!thread) {
+                  console.error("thread not found");
+                  return setMode("error");
+                }
+
+                const resp = await submitMessage({
+                  anthropicInstance,
+                  text: x.text,
+                  thread,
+                  historicalAiTextMessageRecords: aiTextRecords,
+                  onStreamStatusChange: (status) =>
+                    setMode(status === "finished" ? "ready" : status),
+                  onStreamChange: (text) => setStreamedText(text),
+                });
 
                 setMode(resp.success ? "ready" : "error");
               }}

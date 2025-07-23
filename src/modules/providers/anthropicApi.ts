@@ -29,7 +29,7 @@ export const createAnthropicTextMessage = (p: {
   return createAnthropicMessage({ role: p.role, content: [{ type: "text", text: p.text }] });
 };
 
-type TStreamStatus = "streaming" | "finished" | "error";
+export type TStreamStatus = "streaming" | "finished" | "error";
 export const callAnthropic = async (p: {
   anthropic: Anthropic;
   messages: TAnthropicMessage[];
