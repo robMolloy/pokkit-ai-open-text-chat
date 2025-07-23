@@ -12,29 +12,17 @@ import { ErrorScreen } from "@/screens/ErrorScreen";
 import { LoadingScreen } from "@/screens/LoadingScreen";
 import React, { useState } from "react";
 import { useAiTextMessageRecordsStore } from "../aiTextMessages/aiTextMessageRecordsStore";
-import {
-  createAiTextMessageRecord,
-  TAiTextMessageRecord,
-} from "../aiTextMessages/dbAiTextMessageUtils";
+import { createAiTextMessageRecord } from "../aiTextMessages/dbAiTextMessageUtils";
 import {
   createAiThreadRecord,
   updateAiThreadRecordTitle,
 } from "../aiThreads/dbAiThreadRecordUtils";
 import {
   callAnthropic,
-  createAnthropicMessage,
+  createAnthropicTextMessage,
   createTitleForMessageThreadWithAnthropic,
 } from "../providers/anthropicApi";
 import { AiInputTextForm } from "./components/AiInputTextForm";
-
-export const createAnthropicMessageFromAiTextAndMediaMessageWithCachedFileRecords = async (p: {
-  textMessage: TAiTextMessageRecord;
-}) => {
-  return createAnthropicMessage({
-    role: p.textMessage.role,
-    content: [{ type: "text", text: p.textMessage.contentText }],
-  });
-};
 
 export const AiChatScreen = (p: { threadFriendlyId: string }) => {
   const threadFriendlyId = p.threadFriendlyId;
@@ -112,27 +100,23 @@ export const AiChatScreen = (p: { threadFriendlyId: string }) => {
                   })();
 
                   if (!thread) return { success: false, error: "thread not found" };
+                  const threadId = thread.id;
 
                   const createAiTextMessageRecordResp = await createAiTextMessageRecord({
                     pb,
-                    data: { threadId: thread.id, role: "user", contentText: x.text },
+                    data: { threadId, role: "user", contentText: x.text },
                   });
 
                   if (!createAiTextMessageRecordResp.success)
                     return { success: false, error: "create ai text message failed" };
 
-                  const newUserMessage = createAnthropicMessage({
-                    role: "user",
-                    content: [{ type: "text", text: x.text }],
-                  });
+                  const newUserMessage = createAnthropicTextMessage({ role: "user", text: x.text });
 
-                  const anthropicMessagesFromRecords = await Promise.all(
-                    aiTextWithMediaRecords.map((x) =>
-                      createAnthropicMessage({
-                        role: x.textMessage.role,
-                        content: [{ type: "text", text: x.textMessage.contentText }],
-                      }),
-                    ),
+                  const anthropicMessagesFromRecords = aiTextWithMediaRecords.map((x) =>
+                    createAnthropicTextMessage({
+                      role: x.textMessage.role,
+                      text: x.textMessage.contentText,
+                    }),
                   );
 
                   const anthropicMessages = [...anthropicMessagesFromRecords, newUserMessage];
@@ -159,11 +143,7 @@ export const AiChatScreen = (p: { threadFriendlyId: string }) => {
 
                   await createAiTextMessageRecord({
                     pb,
-                    data: {
-                      threadId: thread.id,
-                      role: "assistant",
-                      contentText: anthropicResp.data,
-                    },
+                    data: { threadId, role: "assistant", contentText: anthropicResp.data },
                   });
 
                   return { success: true };

@@ -7,32 +7,7 @@ export const anthropicMessageContentTextSchema = z.object({
   text: z.string(),
 });
 
-const imageMediaTypeSchema = z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]);
-const docMediaTypeSchema = z.literal("application/pdf");
-
-export const anthropicMessageContentImageSchema = z.object({
-  type: z.literal("image"),
-  source: z.object({
-    type: z.literal("base64"),
-    media_type: imageMediaTypeSchema,
-    data: z.string(),
-  }),
-});
-export const anthropicMessageContentDocSchema = z.object({
-  type: z.literal("document"),
-  source: z.object({
-    type: z.literal("base64"),
-    media_type: docMediaTypeSchema,
-    data: z.string(),
-  }),
-});
-
-export const anthropicMessageContentItemSchema = z.union([
-  anthropicMessageContentTextSchema,
-  anthropicMessageContentImageSchema,
-  anthropicMessageContentDocSchema,
-]);
-export type TAnthropicMessageContentItem = z.infer<typeof anthropicMessageContentItemSchema>;
+export type TAnthropicMessageContentItem = z.infer<typeof anthropicMessageContentTextSchema>;
 export type TAnthropicMessageRole = "user" | "assistant";
 export type TAnthropicMessage = {
   id: string;
@@ -45,6 +20,13 @@ export const createAnthropicMessage = (p: {
   content: TAnthropicMessageContentItem[];
 }): TAnthropicMessage => {
   return { id: uuid(), role: p.role, content: p.content };
+};
+
+export const createAnthropicTextMessage = (p: {
+  role: TAnthropicMessageRole;
+  text: string;
+}): TAnthropicMessage => {
+  return createAnthropicMessage({ role: p.role, content: [{ type: "text", text: p.text }] });
 };
 
 type TStreamStatus = "streaming" | "finished" | "error";
