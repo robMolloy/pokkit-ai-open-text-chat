@@ -1,10 +1,5 @@
 import { Layout } from "@/components/layout/Layout";
 import { pb } from "@/config/pocketbaseConfig";
-import {
-  useAiMediaMessageRecordsStore,
-  useCachedFilesStoreWatcher,
-} from "@/modules/aiMediaMessages/aiMediaMessageRecordsStore";
-import { smartSubscribeToAiMediaMessageRecords } from "@/modules/aiMediaMessages/dbAiMediaMessageUtils";
 import { useAiTextMessageRecordsStore } from "@/modules/aiTextMessages/aiTextMessageRecordsStore";
 import { smartSubscribeToAiTextMessageRecords } from "@/modules/aiTextMessages/dbAiTextMessageUtils";
 import { useAiThreadRecordsStore } from "@/modules/aiThreads/aiThreadRecordsStore";
@@ -80,12 +75,10 @@ export default function App({ Component, pageProps }: AppProps) {
   const currentUserStore = useCurrentUserStore();
   const aiThreadRecordsStore = useAiThreadRecordsStore();
   const aiTextMessageRecordsStore = useAiTextMessageRecordsStore();
-  const aiMediaMessageRecordsStore = useAiMediaMessageRecordsStore();
 
   themeStore.useThemeStoreSideEffect();
 
   useAnthropicStoreSync();
-  useCachedFilesStoreWatcher();
 
   useAuth({
     onIsLoading: () => {},
@@ -105,11 +98,6 @@ export default function App({ Component, pageProps }: AppProps) {
         pb,
         onChange: (x) => aiTextMessageRecordsStore.setData(x),
         onError: () => aiTextMessageRecordsStore.setData(null),
-      });
-      smartSubscribeToAiMediaMessageRecords({
-        pb,
-        onChange: (x) => aiMediaMessageRecordsStore.setData(x),
-        onError: () => aiMediaMessageRecordsStore.setData(null),
       });
     },
     onIsLoggedOut: () => {},

@@ -3,7 +3,6 @@ import { pb } from "@/config/pocketbaseConfig";
 import {
   AssistantTextMessage,
   ErrorMessage,
-  UserMediaMessages,
   UserTextMessage,
 } from "@/modules/aiChat/components/Messages";
 import { ScrollContainer } from "@/modules/aiChat/components/ScrollContainer";
@@ -12,11 +11,6 @@ import { useAnthropicStore } from "@/modules/providers/anthropicStore";
 import { ErrorScreen } from "@/screens/ErrorScreen";
 import { LoadingScreen } from "@/screens/LoadingScreen";
 import React, { useState } from "react";
-import { useAiMediaMessageRecordsWithCachedFilesStore } from "../aiMediaMessages/aiMediaMessageRecordsStore";
-import {
-  createAiMediaMessageRecord,
-  TAiMediaMessageRecordWithCachedFile,
-} from "../aiMediaMessages/dbAiMediaMessageUtils";
 import { useAiTextMessageRecordsStore } from "../aiTextMessages/aiTextMessageRecordsStore";
 import {
   createAiTextMessageRecord,
@@ -31,23 +25,14 @@ import {
   createAnthropicMessage,
   createTitleForMessageThreadWithAnthropic,
 } from "../providers/anthropicApi";
-import { AiInputTextAndMedia } from "./components/AiInputTextAndImages";
-import { convertFilesToFileDetails } from "./utils";
+import { AiInputTextForm } from "./components/AiInputTextForm";
 
 export const createAnthropicMessageFromAiTextAndMediaMessageWithCachedFileRecords = async (p: {
   textMessage: TAiTextMessageRecord;
-  mediaMessagesWithCachedFiles?: TAiMediaMessageRecordWithCachedFile[];
 }) => {
-  const mediaFiles = (p.mediaMessagesWithCachedFiles ?? [])
-    .map((x) => x.file)
-    .filter((x) => x !== undefined);
-
   return createAnthropicMessage({
     role: p.textMessage.role,
-    content: [
-      { type: "text", text: p.textMessage.contentText },
-      ...(await convertFilesToFileDetails(mediaFiles)),
-    ],
+    content: [{ type: "text", text: p.textMessage.contentText }],
   });
 };
 
@@ -62,15 +47,9 @@ export const AiChatScreen = (p: { threadFriendlyId: string }) => {
     ? aiTextMessagesRecordsStore.getMessagesByThreadId(currentThread.id)
     : undefined;
 
-  const aiMediaMessageRecordsWithCachedFilesStore = useAiMediaMessageRecordsWithCachedFilesStore();
-  const aiMediaMessageRecords = currentThread?.id
-    ? aiMediaMessageRecordsWithCachedFilesStore.getMessagesByThreadId(currentThread.id)
-    : undefined;
-
   const aiTextWithMediaRecords = (aiTextMessageRecords ?? [])
     .map((x) => ({
       textMessage: x,
-      mediaMessages: aiMediaMessageRecords?.filter((y) => y.aiTextMessageId === x.id),
     }))
     .sort((a, b) => (a.textMessage.created < b.textMessage.created ? -1 : 1));
 
@@ -103,7 +82,6 @@ export const AiChatScreen = (p: { threadFriendlyId: string }) => {
                   <UserTextMessage key={x.textMessage.id}>
                     {x.textMessage.contentText}
                   </UserTextMessage>
-                  {x.mediaMessages && <UserMediaMessages mediaMessageRecords={x.mediaMessages} />}
                 </React.Fragment>
               );
             })}
@@ -116,7 +94,7 @@ export const AiChatScreen = (p: { threadFriendlyId: string }) => {
 
         <div className="p-4 pt-1">
           {anthropicInstance ? (
-            <AiInputTextAndMedia
+            <AiInputTextForm
               disabled={mode === "thinking" || mode === "streaming"}
               onSubmit={async (x) => {
                 setMode("thinking");
@@ -143,26 +121,17 @@ export const AiChatScreen = (p: { threadFriendlyId: string }) => {
                   if (!createAiTextMessageRecordResp.success)
                     return { success: false, error: "create ai text message failed" };
 
-                  const aiTextMessageId = createAiTextMessageRecordResp.data.id;
-
-                  const promises = x.files.map((file) =>
-                    createAiMediaMessageRecord({
-                      pb,
-                      data: { threadId: thread.id, file, aiTextMessageId },
-                    }),
-                  );
-                  await Promise.all(promises);
                   const newUserMessage = createAnthropicMessage({
                     role: "user",
-                    content: [
-                      { type: "text", text: x.text },
-                      ...(await convertFilesToFileDetails(x.files)),
-                    ],
+                    content: [{ type: "text", text: x.text }],
                   });
 
                   const anthropicMessagesFromRecords = await Promise.all(
                     aiTextWithMediaRecords.map((x) =>
-                      createAnthropicMessageFromAiTextAndMediaMessageWithCachedFileRecords(x),
+                      createAnthropicMessage({
+                        role: x.textMessage.role,
+                        content: [{ type: "text", text: x.textMessage.contentText }],
+                      }),
                     ),
                   );
 
