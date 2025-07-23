@@ -30,7 +30,7 @@ import {
 import { AiInputTextForm } from "./components/AiInputTextForm";
 import Anthropic from "@anthropic-ai/sdk";
 
-const submitMessage = async (p: {
+const handleSubmitMessage = async (p: {
   anthropicInstance: Anthropic;
   text: string;
   thread: TAiThreadRecord;
@@ -147,7 +147,7 @@ export const AiChatScreen = (p: { threadFriendlyId: string }) => {
                   return setMode("error");
                 }
 
-                const resp = await submitMessage({
+                const resp = await handleSubmitMessage({
                   anthropicInstance,
                   text: x.text,
                   thread,
